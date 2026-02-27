@@ -27,9 +27,10 @@
 // This should be <= MAX_EP_NUM defined in usb.h
 #define EP_NUM 2
 
-// First page to be occupied by the user program
+// First page to be occupied by the user program用户程序要占用的第一页	
+// This depends on the size of the bootloader这取决于引导加载程序的大小
 #define MIN_PAGE 4
-
+//
 static uint8_t CMD_SIGNATURE[] = {'B','T','L','D','C','M','D'};
 
 static uint8_t pageData[1024];
@@ -41,7 +42,7 @@ extern volatile uint16_t DeviceConfigured, DeviceStatus;
 
 static USB_SetupPacket *SetupPacket;
 
-/* buffer table base address */
+/* buffer table base address缓冲表基址 */
 #define BTABLE_ADDRESS      (0x00)
 
 /* EP0  */
@@ -53,7 +54,7 @@ static USB_SetupPacket *SetupPacket;
 /* tx buffer base address */
 #define ENDP1_TXADDR        (0x100)
 
-/* USB Descriptors */
+/* USB Descriptors USB描述符 */
 static const uint8_t USB_DEVICE_DESC[] = {
 	0x12,        // bLength
 	0x01,        // bDescriptorType (Device)
@@ -70,7 +71,7 @@ static const uint8_t USB_DEVICE_DESC[] = {
 	0x00,        // iSerialNumber (String Index)
 	0x01         // bNumConfigurations 1
 };
-
+// Language ID String Descriptor语言ID字符串描述符
 static const uint8_t USBD_DEVICE_CFG_DESCRIPTOR[] = {
 	0x09,        // bLength
 	0x02,        // bDescriptorType (Configuration)
@@ -106,7 +107,7 @@ static const uint8_t USBD_DEVICE_CFG_DESCRIPTOR[] = {
 	0x08, 0x00,  // wMaxPacketSize 8
 	0x05         // bInterval 5 (unit depends on device speed)
 };
-
+//
 static const uint8_t usbHidReportDescriptor[32] = {
 		0x06, 0x00, 0xFF,  // Usage Page (Vendor Defined 0xFF00)
 		0x09, 0x01,        // Usage (0x01)
@@ -126,63 +127,65 @@ static const uint8_t usbHidReportDescriptor[32] = {
 		0xC0               // End Collection
 };
 
+/* Initialize USB HID Device初始化USB HID设备 */
 void HIDUSB_Reset() {
 
 	led_init();
 	led_off();
 
-	// Initialize Flash Page Settings
+	// Initialize Flash Page Settings初始化闪存页设置
 	currentPage = MIN_PAGE;
 	currentPageOffset = 0;
 
 	_SetBTABLE(BTABLE_ADDRESS);
 
-	/* Initialize Endpoint 0 */
+	/* Initialize Endpoint 0 初始化端点0*/
 	_SetEPType(ENDP0, EP_CONTROL);
 	_SetEPRxAddr(ENDP0, ENDP0_RXADDR);
 	_SetEPTxAddr(ENDP0, ENDP0_TXADDR);
 	_ClearEP_KIND(ENDP0);
-	_SetEPRxCount(ENDP0, 8); /* fixed by Ngo Hung Cuong */
+	_SetEPRxCount(ENDP0, 8); /* fixed by Ngo Hung Cuong*/
 	_SetEPRxValid(ENDP0);
 
-	/* Initialize Endpoint 1 */
+	/* Initialize Endpoint 1 初始化端点1 */
 	_SetEPType(ENDP1, EP_INTERRUPT);
 	_SetEPTxAddr(ENDP1, ENDP1_TXADDR);
 	_SetEPTxCount(ENDP1, 0x8);
 	_SetEPRxStatus(ENDP1, EP_RX_DIS);
 	_SetEPTxStatus(ENDP1, EP_TX_NAK);
 
-	/* set address in every used endpoint */
+	/* set address in every used endpoint 设置每个已用端点的地址 */
 	for (int i = 0; i < EP_NUM; i++) {
 		_SetEPAddress((uint8_t )i, (uint8_t )i);
 		RxTxBuffer[i].MaxPacketSize = 8;
 	}
 
-	_SetDADDR(0 | DADDR_EF); /* set device address and enable function */
+	_SetDADDR(0 | DADDR_EF); /* set device address and enable function 设置设备地址和启用功能 */
 }
 
+/* Handle the Get Descriptor request 处理获取描述符请求 */
 void HIDUSB_GetDescriptor(USB_SetupPacket *SPacket) {
 
-	switch (SPacket->wValue.H) {
-		case USB_DEVICE_DESC_TYPE:
+	switch (SPacket->wValue.H) {// Descriptor Type描述符类型
+		case USB_DEVICE_DESC_TYPE:// Device Descriptor设备描述符
 			USB_SendData(0, (uint16_t *) USB_DEVICE_DESC,
 					SPacket->wLength > sizeof(USB_DEVICE_DESC) ?
 							sizeof(USB_DEVICE_DESC) : SPacket->wLength);
 			break;
 
-		case USB_CFG_DESC_TYPE:
+		case USB_CFG_DESC_TYPE:// Configuration Descriptor配置描述符
 			USB_SendData(0, (uint16_t *) USBD_DEVICE_CFG_DESCRIPTOR,
 					SPacket->wLength > sizeof(USBD_DEVICE_CFG_DESCRIPTOR) ?
 							sizeof(USBD_DEVICE_CFG_DESCRIPTOR) : SPacket->wLength);
 			break;
 
-		case USB_REPORT_DESC_TYPE:
+		case USB_REPORT_DESC_TYPE:// Report Descriptor报告描述符
 			USB_SendData(0, (uint16_t *) usbHidReportDescriptor,
 					SPacket->wLength > sizeof(usbHidReportDescriptor) ?
 							sizeof(usbHidReportDescriptor) : SPacket->wLength);
 			break;
 
-		case USB_STR_DESC_TYPE:
+		case USB_STR_DESC_TYPE:// String Descriptor字符串描述符
 
 			switch (SPacket->wValue.L) {
 			case 0x00:
@@ -210,16 +213,16 @@ void HIDUSB_GetDescriptor(USB_SetupPacket *SPacket) {
 			break;
 	}
 }
-
+// Unlock the Flash memory for write access解锁闪存以进行写访问
 static void HIDUSB_FlashUnlock() {
 	FLASH->KEYR = FLASH_KEY1;
 	FLASH->KEYR = FLASH_KEY2;
 }
-
+// Lock the Flash memory to prevent write access锁定闪存以防止写访问
 static void HIDUSB_FlashLock() {
 	bit_set(FLASH->CR, FLASH_CR_LOCK);
 }
-
+// Format (erase) a Flash memory page格式化（擦除）闪存页
 static void HIDUSB_FormatFlashPage(uint32_t page) {
 	while(FLASH->SR & FLASH_SR_BSY);
 
@@ -233,7 +236,7 @@ static void HIDUSB_FormatFlashPage(uint32_t page) {
 
 	bit_clear(FLASH->CR, FLASH_CR_PER);
 }
-
+// Write data to a Flash memory page将数据写入闪存页
 static void HIDUSB_WriteFlash(uint32_t page, uint8_t *data, uint16_t size) {
 	while(FLASH->SR & FLASH_SR_BSY);
 
@@ -247,7 +250,7 @@ static void HIDUSB_WriteFlash(uint32_t page, uint8_t *data, uint16_t size) {
 
 	bit_clear(FLASH->CR, FLASH_CR_PG);
 }
-
+// Check if the received packet is a command检查接收到的数据包是否为命令
 static uint8_t HIDUSB_PacketIsCommand() {
 	uint8_t hasdata = 0;
 
@@ -265,7 +268,7 @@ static uint8_t HIDUSB_PacketIsCommand() {
 
 	return 0;
 }
-
+// Handle the data received from the host处理从主机接收的数据
 void HIDUSB_HandleData(uint8_t *data) {
 	uint32_t pageAddress;
 
@@ -276,7 +279,7 @@ void HIDUSB_HandleData(uint8_t *data) {
 	if(currentPageOffset == 128) {
 		if(HIDUSB_PacketIsCommand()) {
 			switch(pageData[7]) {
-			case 0x00: // Reset Page Command
+			case 0x00: // Reset Page Command 重置页命令
 				currentPage = MIN_PAGE;
 				currentPageOffset = 0;
 
@@ -303,19 +306,19 @@ void HIDUSB_HandleData(uint8_t *data) {
 		}
 	}
 }
-
+// USB Endpoint Handler USB端点处理程序
 void HIDUSB_EPHandler(uint16_t Status) {
 
 	uint8_t EPn = Status & USB_ISTR_EP_ID;
 	uint16_t EP = _GetENDPOINT(EPn);
 
-	// OUT and SETUP packets (data reception)
+	// OUT and SETUP packets (data reception) 接收OUT和SETUP数据包
 	if (EP & EP_CTR_RX) {
 
-		// Copy from packet area to user buffer
+		// Copy from packet area to user buffer 从数据包区域复制到用户缓冲区
 		USB_PMA2Buffer(EPn);
 
-		if (EPn == 0) { //If control endpoint
+		if (EPn == 0) { //If control endpoint 
 
 			if (EP & USB_EP0R_SETUP) {
 
@@ -360,8 +363,8 @@ void HIDUSB_EPHandler(uint16_t Status) {
 				}
 			}
 
-		} else { // Got data from another EP
-			// Call user function
+		} else { // Got data from another EP 
+			// Call user function 调用用户函数
 			HIDUSB_DataReceivedHandler(RxTxBuffer[EPn].RXB,
 					RxTxBuffer[EPn].RXL);
 		}
@@ -370,7 +373,7 @@ void HIDUSB_EPHandler(uint16_t Status) {
 		_SetEPRxValid(EPn);
 	}
 
-	if (EP & EP_CTR_TX) { // something transmitted
+	if (EP & EP_CTR_TX) { // something transmitted 
 		if (DeviceAddress) {
 			_SetDADDR(DeviceAddress | DADDR_EF); /* set device address and enable function */
 			DeviceAddress = 0;
@@ -386,7 +389,7 @@ void HIDUSB_EPHandler(uint16_t Status) {
 		_ClearEP_CTR_TX(EPn);
 	}
 }
-
+// Weak function to be implemented by the user用户要实现的弱函数
 __attribute__((weak)) void HIDUSB_DataReceivedHandler(uint16_t *Data, uint16_t Length) {
 }
 

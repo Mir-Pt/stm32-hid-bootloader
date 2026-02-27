@@ -21,7 +21,7 @@
 
 void HIDUSB_Reset();
 void HIDUSB_EPHandler(uint16_t Status);
-
+// Weak function to be implemented by the user用户要实现的弱函数
 __attribute__((weak)) void HIDUSB_DataReceivedHandler(uint16_t *Data,
 		uint16_t Length);
 

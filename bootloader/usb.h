@@ -19,41 +19,44 @@
 #ifndef USB_H_
 #define USB_H_
 
-// Define here the max endpoint number for your USB device(s)
+// Define here the max endpoint number for your USB device(s) 
+//在这里定义USB设备的最大端点数。
 #define MAX_EP_NUM 2
 
 // Define here the max buffer size for your USB devices(s) endpoints
+//在这里定义USB设备的最大缓冲区大小
 #define MAX_BUFFER_SIZE 64
 
+// USB接收和发送端点缓冲区结构
 typedef struct {
-	uint16_t RXB[MAX_BUFFER_SIZE / 2];
-	uint16_t *TXB;
-	uint8_t RXL;
-	uint8_t TXL;
-	uint8_t MaxPacketSize;
+	uint16_t RXB[MAX_BUFFER_SIZE / 2];  // 接收缓冲区（以16位为单位）
+	uint16_t *TXB;                      // 发送数据指针
+	uint8_t RXL;                        // 接收数据长度
+	uint8_t TXL;                        // 发送数据长度
+	uint8_t MaxPacketSize;              // 最大数据包大小
 } USB_RxTxBuf_t;
 
 extern USB_RxTxBuf_t RxTxBuffer[MAX_EP_NUM];
 
-extern const uint8_t sdProduct[0x2C];
-extern const uint8_t sdVendor[0x2A];
-extern const uint8_t sdSerial[0x16];
-extern const uint8_t sdLangID[0x04];
+extern const uint8_t sdProduct[0x2C];// USB Product String Descriptor-USB产品字符串描述符
+extern const uint8_t sdVendor[0x2A];// USB Vendor String Descriptor-USB供应商字符串描述符
+extern const uint8_t sdSerial[0x16];// USB Serial String Descriptor-USB序列号字符串描述符
+extern const uint8_t sdLangID[0x04];// USB Language ID String Descriptor-USB语言ID字符串描述符
 
-/* USB Standard Request Codes */
-#define USB_REQUEST_GET_STATUS			0x00
-#define USB_REQUEST_CLEAR_FEATURE		0x01
-#define USB_REQUEST_SET_FEATURE			0x03
-#define USB_REQUEST_SET_ADDRESS			0x05
-#define USB_REQUEST_GET_DESCRIPTOR		0x06
-#define USB_REQUEST_SET_DESCRIPTOR		0x07
-#define USB_REQUEST_GET_CONFIGURATION	0x08
-#define USB_REQUEST_SET_CONFIGURATION	0x09
-#define USB_REQUEST_GET_INTERFACE		0x0A
-#define USB_REQUEST_SET_INTERFACE		0x0B
-#define USB_REQUEST_SYNC_FRAME			0x0C
+/* USB Standard Request Codes  USB标准请求码 */
+#define USB_REQUEST_GET_STATUS			0x00 // 0b00000000 
+#define USB_REQUEST_CLEAR_FEATURE		0x01 // 0b00000001
+#define USB_REQUEST_SET_FEATURE			0x03 // 0b00000011
+#define USB_REQUEST_SET_ADDRESS			0x05 // 0b00000101
+#define USB_REQUEST_GET_DESCRIPTOR		0x06 // 0b00000110
+#define USB_REQUEST_SET_DESCRIPTOR		0x07 // 0b00000111
+#define USB_REQUEST_GET_CONFIGURATION	0x08 // 0b00001000
+#define USB_REQUEST_SET_CONFIGURATION	0x09 // 0b00001001
+#define USB_REQUEST_GET_INTERFACE		0x0A // 0b00001010
+#define USB_REQUEST_SET_INTERFACE		0x0B // 0b00001011
+#define USB_REQUEST_SYNC_FRAME			0x0C // 0b00001100
 
-/* USB Descriptor Types */
+/* USB Descriptor Types  USB描述符类型*/
 #define USB_DEVICE_DESC_TYPE			0x01
 #define USB_CFG_DESC_TYPE			0x02
 #define USB_STR_DESC_TYPE			0x03
@@ -63,12 +66,12 @@ extern const uint8_t sdLangID[0x04];
 #define USB_OSPEED_CFG_DESC_TYPE		0x07
 #define USB_IFACE_PWR_DESC_TYPE		0x08
 #define USB_REPORT_DESC_TYPE			0x22
-
+/* USB Setup Packet Structure USB设置包结构 */
 typedef struct {
 	uint8_t L :8;
 	uint8_t H :8;
 } USB_WByte;
-
+/* USB Setup Packet Structure USB设置包结构 */
 typedef struct {
 	uint8_t bmRequestType;
 	uint8_t bRequest;
@@ -81,13 +84,13 @@ typedef struct {
 /* Exported types ------------------------------------------------------------*/
 typedef enum _EP_DBUF_DIR
 {
-  /* double buffered endpoint direction */
+  /* double buffered endpoint direction 双缓冲端点方向 */
   EP_DBUF_ERR,
   EP_DBUF_OUT,
   EP_DBUF_IN
 }EP_DBUF_DIR;
 
-/* endpoint buffer number */
+/* endpoint buffer number 端点缓冲区编号*/
 enum EP_BUF_NUM
 {
   EP_NOBUF,
@@ -96,33 +99,34 @@ enum EP_BUF_NUM
 };
 
 /* Exported constants --------------------------------------------------------*/
-#define RegBase  (0x40005C00L)  /* USB_IP Peripheral Registers base address */
-#define PMAAddr  (0x40006000L)  /* USB_IP Packet Memory Area base address   */
+/* STM32的USB外设有固定的内存映射地址。Base Address 基址*/
+#define RegBase  (0x40005C00L)  /*  USB_IP外设寄存器的基址*/
+#define PMAAddr  (0x40006000L)  /*  USB_IP数据包内存区域的基址*/
 
 /******************************************************************************/
 /*                         General registers                                  */
 /******************************************************************************/
 
-/* Control register */
+/* Control register 控制寄存器 */
 #define CNTR    ((__IO unsigned *)(RegBase + 0x40))
-/* Interrupt status register */
+/* Interrupt status register 中断状态寄存器 */
 #define ISTR    ((__IO unsigned *)(RegBase + 0x44))
-/* Frame number register */
+/* Frame number register 帧号寄存器 */
 #define FNR     ((__IO unsigned *)(RegBase + 0x48))
-/* Device address register */
+/* Device address register 设备地址寄存器 */
 #define DADDR   ((__IO unsigned *)(RegBase + 0x4C))
-/* Buffer Table address register */
+/* Buffer Table address register 缓冲区表地址寄存器 */
 #define BTABLE  ((__IO unsigned *)(RegBase + 0x50))
 #if defined STM32F303xE || defined STM32F302x8
-  /* LPM Control and Status register */
+  /* LPM Control and Status register LPM控制和状态寄存器*/
 #define LPMCSR    (( __IO unsigned *)(RegBase + 0x54))
 #endif
 /******************************************************************************/
 /*                         Endpoint registers                                 */
 /******************************************************************************/
-#define EP0REG  ((__IO unsigned *)(RegBase)) /* endpoint 0 register address */
+#define EP0REG  ((__IO unsigned *)(RegBase)) /* endpoint 0 register address 端点0寄存器地址 */
 
-/* Endpoint Addresses (w/direction) */
+/* Endpoint Addresses (w/direction) 终端地址（w/direction）*/
 #define EP0_OUT     ((uint8_t)0x00)
 #define EP0_IN      ((uint8_t)0x80)
 #define EP1_OUT     ((uint8_t)0x01)
@@ -140,7 +144,7 @@ enum EP_BUF_NUM
 #define EP7_OUT     ((uint8_t)0x07)
 #define EP7_IN      ((uint8_t)0x87)
 
-/* endpoints enumeration */
+/* endpoints enumeration 端点枚举 */
 #define ENDP0       ((uint8_t)0)
 #define ENDP1       ((uint8_t)1)
 #define ENDP2       ((uint8_t)2)
@@ -153,19 +157,19 @@ enum EP_BUF_NUM
 /******************************************************************************/
 /*                       ISTR interrupt events                                */
 /******************************************************************************/
-#define ISTR_CTR    (0x8000) /* Correct TRansfer (clear-only bit) */
-#define ISTR_DOVR   (0x4000) /* DMA OVeR/underrun (clear-only bit) */
-#define ISTR_ERR    (0x2000) /* ERRor (clear-only bit) */
-#define ISTR_WKUP   (0x1000) /* WaKe UP (clear-only bit) */
-#define ISTR_SUSP   (0x0800) /* SUSPend (clear-only bit) */
-#define ISTR_RESET  (0x0400) /* RESET (clear-only bit) */
-#define ISTR_SOF    (0x0200) /* Start Of Frame (clear-only bit) */
-#define ISTR_ESOF   (0x0100) /* Expected Start Of Frame (clear-only bit) */
+#define ISTR_CTR    (0x8000) /* Correct TRansfer (clear-only bit) 正确传输（仅清除位）*/
+#define ISTR_DOVR   (0x4000) /* DMA OVeR/underrun (clear-only bit) DMA溢出/欠流（仅清除位）*/
+#define ISTR_ERR    (0x2000) /* ERRor (clear-only bit) 错误（仅清除位）*/
+#define ISTR_WKUP   (0x1000) /* WaKe UP (clear-only bit) 唤醒（仅清除位）*/
+#define ISTR_SUSP   (0x0800) /* SUSPend (clear-only bit) 挂起（仅清除位）*/
+#define ISTR_RESET  (0x0400) /* RESET (clear-only bit) 重置（仅清除位）*/
+#define ISTR_SOF    (0x0200) /* Start Of Frame (clear-only bit) 帧开始（仅清除位）*/
+#define ISTR_ESOF   (0x0100) /* Expected Start Of Frame (clear-only bit) 预期帧开始（仅清除位）*/
 #if defined STM32F303xE || defined STM32F302x8
 #define ISTR_L1REQ  (0x0080)  /* LPM L1 state request  */
 #endif
-#define ISTR_DIR    (0x0010)  /* DIRection of transaction (read-only bit)  */
-#define ISTR_EP_ID  (0x000F)  /* EndPoint IDentifier (read-only bit)  */
+#define ISTR_DIR    (0x0010)  /* DIRection of transaction (read-only bit)  事务方向（只读位）*/
+#define ISTR_EP_ID  (0x000F)  /* EndPoint IDentifier (read-only bit)  端点标识符（只读位）*/
 
 #define CLR_CTR    (~ISTR_CTR)   /* clear Correct TRansfer bit */
 #define CLR_DOVR   (~ISTR_DOVR)  /* clear DMA OVeR/underrun bit*/
@@ -311,6 +315,8 @@ enum EP_BUF_NUM
 /* GetENDPOINT */
 #define _GetENDPOINT(bEpNum)        ((uint16_t)(*(EP0REG + bEpNum)))
 
+
+//端点状态管理宏,这个宏通过异或操作切换数据触发位(Data Toggle)，确保USB数据传输的同步。
 /*******************************************************************************
 * Macro Name     : SetEPType
 * Description    : sets the type in the endpoint register(bits EP_TYPE[1:0])

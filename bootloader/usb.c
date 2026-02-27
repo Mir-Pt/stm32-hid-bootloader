@@ -21,18 +21,19 @@
 
 #include "usb.h"
 #include "bitwise.h"
-
+/* USB Buffer */
 USB_RxTxBuf_t RxTxBuffer[MAX_EP_NUM];
-
+/* 全局变量和描述符定义 */
 volatile uint8_t DeviceAddress = 0;
 volatile uint16_t DeviceConfigured = 0, DeviceStatus = 0;
 void (*_EPHandler)(uint16_t) = NULL;
 void (*_USBResetHandler)(void) = NULL;
 
-/* USB String Descriptors */
+/* USB字符串描述符 */
+/* 注:USB字符串使用Unicode编码，每个字符后跟一个0字节。 */
 const uint8_t sdVendor[] = {
 	0x2A, // Size,
-	0x03, // Descriptor type
+	0x03, // Descriptor type 
 	'w', 0, 'w', 0, 'w', 0, '.', 0, 'b', 0, 'r', 0, 'u', 0, 'n', 0, 'o', 0,
 	'f', 0, 'r', 0, 'e', 0, 'i', 0, 't', 0, 'a', 0, 's', 0, '.', 0, 'c', 0,
 	'o', 0, 'm', 0
@@ -57,19 +58,19 @@ const uint8_t sdLangID[] = {
 		0x03, // Descriptor type
 		0x09, 0x04
 };
-
+/*  USB端点处理程序 */
 void USB_PMA2Buffer(uint8_t EPn) {
-	uint8_t Count = RxTxBuffer[EPn].RXL = (_GetEPRxCount(EPn) & 0x3FF);
-	uint32_t *Address = (uint32_t *) (PMAAddr + _GetEPRxAddr(EPn) * 2);
+	uint8_t Count = RxTxBuffer[EPn].RXL = (_GetEPRxCount(EPn) & 0x3FF);//获取接收数据长度（低10位有效）
+	uint32_t *Address = (uint32_t *) (PMAAddr + _GetEPRxAddr(EPn) * 2);//PMA地址需要乘以2，因为STM32的USB PMA是16位寻址
 	uint16_t *Destination = (uint16_t *) RxTxBuffer[EPn].RXB;
-
+	//  从PMA复制数据到用户缓冲区
 	for (uint8_t i = 0; i < Count; i++) {
 		*(uint16_t *) Destination = *(uint16_t *) Address;
 		Destination++;
 		Address++;
 	}
 }
-
+/*  从用户缓冲区复制数据到PMA */
 void USB_Buffer2PMA(uint8_t EPn) {
 	uint32_t *Destination;
 	uint8_t Count;
@@ -87,11 +88,11 @@ void USB_Buffer2PMA(uint8_t EPn) {
 
 	RxTxBuffer[EPn].TXL -= Count;
 }
-
+/* 发送数据到主机 */
 void USB_SendData(uint8_t EPn, uint16_t *Data, uint16_t Length) {
 
 	if (EPn > 0 && !DeviceConfigured) {
-		return;
+		return;// 端点0以外的端点需要设备配置后才能使用
 	}
 
 	RxTxBuffer[EPn].TXL = Length;
@@ -99,18 +100,19 @@ void USB_SendData(uint8_t EPn, uint16_t *Data, uint16_t Length) {
 	RxTxBuffer[EPn].TXB = Data;
 
 	if (Length > 0) {
-		USB_Buffer2PMA(EPn);
+		USB_Buffer2PMA(EPn);// 将数据从应用缓冲区复制到PMA
 	} else {
-		_SetEPTxCount(EPn, 0);
+		_SetEPTxCount(EPn, 0);// 零长度包
 	}
 
-	_SetEPTxValid(EPn);
+	_SetEPTxValid(EPn);// 设置端点TX状态为VALID，启动传输
 }
-
+/* Shutdown USB 关闭USB */
+//USB关闭遵循STM32的标准流程：禁用中断→清除标志→关闭USB宏单元→模拟断开连接→禁用USB时钟。
 void USB_Shutdown() {
 	bit_set(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
 
-	// Disable USB IRQ
+	// 禁用USB中断
 	NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
 	_SetISTR(0);
 
@@ -120,37 +122,38 @@ void USB_Shutdown() {
 
 	_USBResetHandler = NULL;
 
-	// Turn USB Macrocell off (FRES + PWDN)
+	// 关闭USB宏单元(FRES + PWDN)
 	_SetCNTR(0x03);
 
-	// PA_12 output mode: General purpose output open drain (b01)
+	// 配置PA12为开漏输出并拉低（模拟断开连接） (b01)
 	bit_set(GPIOA->CRH, GPIO_CRH_CNF12_0);
 	bit_clear(GPIOA->CRH, GPIO_CRH_CNF12_1);
 
 	// Set PA_12 to output
 	bit_set(GPIOA->CRH, GPIO_CRH_MODE12);// PA_12 set as: Output mode, max speed 50 MHz.
 
-	// Sinks A12 to GND
+	//拉低PA12
 	GPIOA->BRR = GPIO_BRR_BR12;
 
-	// Disable USB Clock on APB1
+	// 禁用USB时钟 APB1
 	bit_clear(RCC->APB1ENR, RCC_APB1ENR_USBEN);
 }
-
+/* Turn on USB 打开USB */
 static void USB_TurnOn() {
 	bit_set(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
 
-	// PA_12 output mode: General purpose Input Float (b01)
+	// PA_12 output mode: General purpose Input Float (b01)	
 	bit_set(GPIOA->CRH, GPIO_CRH_CNF12_0);
 	bit_clear(GPIOA->CRH, GPIO_CRH_CNF12_1);
 
 	// Set PA_12 to Input mode
 	bit_clear(GPIOA->CRH, GPIO_CRH_MODE12);
 }
-
+/* Initialize USB 初始化USB */
+//USB初始化遵循STM32的标准流程：时钟使能→强制复位→等待复位完成→清除标志→设置中断。
 void USB_Init(void (*EPHandlerPtr)(uint16_t), void (*ResetHandlerPtr)(void)) {
 
-	// Reset RX and TX lengths inside RxTxBuffer struct for all endpoints
+	//  重置所有端点的RxTxBuffer结构内的RX和TX长度
 	for(int i = 0; i < MAX_EP_NUM; i++) {
 		RxTxBuffer[i].RXL = RxTxBuffer[i].TXL = 0;
 	}
@@ -158,15 +161,15 @@ void USB_Init(void (*EPHandlerPtr)(uint16_t), void (*ResetHandlerPtr)(void)) {
 	_EPHandler = EPHandlerPtr;
 	_USBResetHandler = ResetHandlerPtr;
 
-	USB_TurnOn();
+	USB_TurnOn();//配置USB相关的GPIO
 
 	DeviceConfigured = DeviceStatus = 0;
 
-	bit_set(RCC->APB1ENR, RCC_APB1ENR_USBEN);
-	NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
+	bit_set(RCC->APB1ENR, RCC_APB1ENR_USBEN); // 使能USB时钟
+	NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn); // 使能USB中断
 
 	/*** CNTR_PWDN = 0 ***/
-	_SetCNTR(CNTR_FRES);
+	_SetCNTR(CNTR_FRES);// 强制USB复位
 
 	/* The following sequence is recommended:
 	 1- FRES = 0
@@ -176,50 +179,50 @@ void USB_Init(void (*EPHandlerPtr)(uint16_t), void (*ResetHandlerPtr)(void)) {
 	/*** CNTR_FRES = 0 ***/
 	_SetCNTR(0);
 
-	/* Wait until RESET flag = 1 (polling) */
+	/* 等待RESET标志置位 flag = 1 (polling) */
 	while (!(_GetISTR() & ISTR_RESET));
 
-	/*** Clear pending interrupts ***/
+	/***   清除挂起的中断 ***/
 	_SetISTR(0);
 
-	/*** Set interrupt mask ***/
+	/***   设置中断掩码 ***/
 	_SetCNTR(CNTR_CTRM | CNTR_RESETM | CNTR_SUSPM | CNTR_WKUPM);
 }
-
+/* Is device configured 检查设备是否配置 */
 uint16_t USB_IsDeviceConfigured() {
 	return DeviceConfigured;
 }
-
+/*  USB低优先级或CAN RX0中断处理程序 */
 void USB_LP_CAN1_RX0_IRQHandler() {
-	// Handle Reset
+	// 处理Reset中断
 	if (_GetISTR() & ISTR_RESET) {
 		_SetISTR(_GetISTR() & CLR_RESET);
 		if(_USBResetHandler) {
-			_USBResetHandler();
+			_USBResetHandler();// 调用上层复位处理函数
 		}
 		return;
 	}
 
-	// Handle EP data
-	if (_GetISTR() & ISTR_CTR) { // Handle data on EP
+	// 处理端点数据传输中断
+	if (_GetISTR() & ISTR_CTR) { // Handle data on EP 处理EP上的数据
 		if(_EPHandler) {
-			_EPHandler(_GetISTR());
+			_EPHandler(_GetISTR());// 调用端点数据处理函数
 		}
 		_SetISTR(_GetISTR() & CLR_CTR);
 		return;
 	}
 
-	// Handle DOVR
+	// Handle DOVR 处理DOVR
 	if (_GetISTR() & ISTR_DOVR) {
 		_SetISTR(_GetISTR() & CLR_DOVR);
 		return;
 	}
 
-	// Handle Suspend
+	// Handle Suspend 处理挂起
 	if (_GetISTR() & ISTR_SUSP) {
 		_SetISTR(_GetISTR() & CLR_SUSP);
 
-		// If device address is assigned, then reset it
+		// If device address is assigned, then reset it 如果分配了设备地址，则重置它
 		if (_GetDADDR() & 0x007f) {
 			_SetDADDR(0);
 			_SetCNTR(_GetCNTR() & ~CNTR_SUSPM);
@@ -228,31 +231,31 @@ void USB_LP_CAN1_RX0_IRQHandler() {
 		return;
 	}
 
-	// Handle Error
+	// Handle Error 处理错误
 	if (_GetISTR() & ISTR_ERR) {
 		_SetISTR(_GetISTR() & CLR_ERR);
 		return;
 	}
 
-	// Handle Wakeup
+	// Handle Wakeup 处理唤醒
 	if (_GetISTR() & ISTR_WKUP) {
 		_SetISTR(_GetISTR() & CLR_WKUP);
 		return;
 	}
 
-	// Handle SOF
+	// Handle SOF 处理SOF
 	if (_GetISTR() & ISTR_SOF) {
 		_SetISTR(_GetISTR() & CLR_SOF);
 		return;
 	}
 
-	// Handle ESOF
+	// Handle ESOF 处理ESOF
 	if (_GetISTR() & ISTR_ESOF) {
 		_SetISTR(_GetISTR() & CLR_ESOF);
 		return;
 	}
 
-	// Default to clear all interrupt flags
+	// Default to clear all interrupt flags 默认清除所有中断标志
 	_SetISTR(0);
 }
 
